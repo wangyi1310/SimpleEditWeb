@@ -53,4 +53,3 @@ git push origin v3.5.0
 | macOS（Apple Silicon + Intel 通用） | `SimpleEditWeb-macos-universal.zip` | `SimpleEditWeb-macos-universal` |
 | Windows amd64 | `SimpleEditWeb-windows-amd64.zip` | `SimpleEditWeb-windows-amd64.exe` |
 | Linux amd64 | `SimpleEditWeb-linux-amd64.tar.gz` | `SimpleEditWeb-linux-amd64` |
-| Linux arm64（Docker/QEMU 构建） | `SimpleEditWeb-linux-arm64.tar.gz` | `SimpleEditWeb-linux-arm64` |
