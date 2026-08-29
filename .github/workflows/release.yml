@@ -71,7 +71,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path "build\bin\SimpleEditWeb.exe" -DestinationPath "${{ matrix.artifact }}.zip"
+          Compress-Archive -Path "build\bin\SimpleEditWeb.exe" -DestinationPath "build\bin\${{ matrix.artifact }}.zip"
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
