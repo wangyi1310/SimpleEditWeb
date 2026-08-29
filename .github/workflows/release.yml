@@ -1,6 +1,7 @@
 name: Release
 
 # 打 tag（v 开头，如 v3.5.0）自动触发多平台构建并发布 GitHub Release
+# 产物：压缩包（zip/tar.gz）+ 未压缩裸二进制 + sha256 校验
 on:
   push:
     tags:
@@ -66,42 +67,87 @@ jobs:
         run: |
           cd build/bin
           ditto -c -k --keepParent SimpleEditWeb.app "${{ matrix.artifact }}.zip"
+          cp SimpleEditWeb "${{ matrix.artifact }}"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Compress-Archive -Path "build\bin\SimpleEditWeb.exe" -DestinationPath "build\bin\${{ matrix.artifact }}.zip"
+          Copy-Item "build\bin\SimpleEditWeb.exe" "build\bin\${{ matrix.artifact }}.exe"
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
           cd build/bin
           tar -czf "${{ matrix.artifact }}.tar.gz" SimpleEditWeb
+          cp SimpleEditWeb "${{ matrix.artifact }}"
 
       - name: Generate checksum
         shell: bash
         run: |
           cd build/bin
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            sha256sum "${{ matrix.artifact }}.tar.gz" > "${{ matrix.artifact }}.sha256"
-          else
-            sha256sum "${{ matrix.artifact }}.zip" > "${{ matrix.artifact }}.sha256"
-          fi
+          case "${{ runner.os }}" in
+            Linux)   FILES="${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}" ;;
+            Windows) FILES="${{ matrix.artifact }}.zip ${{ matrix.artifact }}.exe" ;;
+            macOS)   FILES="${{ matrix.artifact }}.zip ${{ matrix.artifact }}" ;;
+          esac
+          sha256sum $FILES > "${{ matrix.artifact }}.sha256"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
-            build/bin/*.zip
-            build/bin/*.tar.gz
-            build/bin/*.sha256
+            build/bin/SimpleEditWeb-*
+          retention-days: 5
+
+  build-linux-arm64:
+    name: Build (linux/arm64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # x86 runner 上没有原生 ARM，用 QEMU 模拟 arm64 容器原生编译
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build in arm64 container
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD":/src -w /src \
+            golang:1.25-bookworm \
+            bash -euxc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                wget xz-utils pkg-config ca-certificates \
+                libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+              wget -qO /tmp/node.tar.xz https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-arm64.tar.xz
+              tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+              go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+              wails build -clean -tags webkit2_41
+            '
+
+      - name: Package
+        run: |
+          cd build/bin
+          tar -czf SimpleEditWeb-linux-arm64.tar.gz SimpleEditWeb
+          cp SimpleEditWeb SimpleEditWeb-linux-arm64
+          sha256sum SimpleEditWeb-linux-arm64.tar.gz SimpleEditWeb-linux-arm64 > SimpleEditWeb-linux-arm64.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpleEditWeb-linux-arm64
+          path: |
+            build/bin/SimpleEditWeb-*
           retention-days: 5
 
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -115,6 +161,4 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/*.zip
-            dist/*.tar.gz
-            dist/*.sha256
+            dist/*

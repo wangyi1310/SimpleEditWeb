@@ -46,12 +46,11 @@ git tag v3.5.0
 git push origin v3.5.0
 ```
 
-产物清单：
+产物清单（每个平台含压缩包 + 未压缩裸二进制 + `.sha256` 校验）：
 
-| 平台 | 产物 |
-|---|---|
-| macOS（Apple Silicon + Intel 通用） | `SimpleEditWeb-macos-universal.zip` |
-| Windows amd64 | `SimpleEditWeb-windows-amd64.zip` |
-| Linux amd64 | `SimpleEditWeb-linux-amd64.tar.gz` |
-
-每个产物附带 `.sha256` 校验文件。
+| 平台 | 压缩包 | 裸二进制 |
+|---|---|---|
+| macOS（Apple Silicon + Intel 通用） | `SimpleEditWeb-macos-universal.zip` | `SimpleEditWeb-macos-universal` |
+| Windows amd64 | `SimpleEditWeb-windows-amd64.zip` | `SimpleEditWeb-windows-amd64.exe` |
+| Linux amd64 | `SimpleEditWeb-linux-amd64.tar.gz` | `SimpleEditWeb-linux-amd64` |
+| Linux arm64（Docker/QEMU 构建） | `SimpleEditWeb-linux-arm64.tar.gz` | `SimpleEditWeb-linux-arm64` |
