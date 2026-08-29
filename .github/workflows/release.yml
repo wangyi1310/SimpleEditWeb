@@ -67,7 +67,7 @@ jobs:
         run: |
           cd build/bin
           ditto -c -k --keepParent SimpleEditWeb.app "${{ matrix.artifact }}.zip"
-          cp SimpleEditWeb "${{ matrix.artifact }}"
+          cp SimpleEditWeb.app/Contents/MacOS/SimpleEditWeb "${{ matrix.artifact }}"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
