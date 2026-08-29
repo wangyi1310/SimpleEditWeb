@@ -86,7 +86,7 @@ jobs:
           if [ "${{ runner.os }}" = "Linux" ]; then
             sha256sum "${{ matrix.artifact }}.tar.gz" > "${{ matrix.artifact }}.sha256"
           else
-            shasum -a 256 "${{ matrix.artifact }}.zip" > "${{ matrix.artifact }}.sha256"
+            sha256sum "${{ matrix.artifact }}.zip" > "${{ matrix.artifact }}.sha256"
           fi
 
       - name: Upload artifact
