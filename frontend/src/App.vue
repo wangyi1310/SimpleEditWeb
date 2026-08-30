@@ -394,21 +394,30 @@ export default {
       })
     },
 
-    // ===== SSH：连接管理 =====
-    // 拖动调整左侧连接栏宽度（持久化）
     // ===== SSH：侧栏折叠 / 宽度 =====
     toggleSide() {
       this.sshSideCollapsed = !this.sshSideCollapsed
       localStorage.setItem('se.sshSideCollapsed', this.sshSideCollapsed ? '1' : '0')
-      // 宽度变化后让所有终端按新尺寸重新适配
-      this.$nextTick(() => {
+      this.refitAllPanes()
+      if (this.sessionView === 'term') this.focusActivePane()
+    },
+    // 布局变化（窗口/侧栏/分屏）后让所有终端按新尺寸重新适配
+    refitAllPanes() {
+      const doFit = () => {
         for (const tab of this.tabs) {
           for (const sid of tab.panes) {
             const el = this._paneRefs && this._paneRefs[sid]
             if (el && el.fitTerm) el.fitTerm()
           }
         }
-        this.focusActivePane()
+      }
+      // nextTick → 下一帧 → 120ms 兜底，确保布局稳定后再算行列数
+      this.$nextTick(() => {
+        doFit()
+        requestAnimationFrame(() => {
+          doFit()
+          setTimeout(doFit, 120)
+        })
       })
     },
     startSideResize(e) {
@@ -583,11 +592,22 @@ export default {
         else if (e.key === 'd') { e.preventDefault(); this.splitPane(e.shiftKey ? 'col' : 'row') }
         else if (e.key === '[') { e.preventDefault(); this.cyclePane() }
         else if (e.key === ']') { e.preventDefault(); this.cyclePane() }
+        else if (k === 'b') { e.preventDefault(); this.toggleSide() }
       }
     }
     window.addEventListener('keydown', onKey)
+    // 窗口缩放后让终端按新尺寸重新适配（防抖）
+    this._onWinResize = () => {
+      clearTimeout(this._resizeTimer)
+      this._resizeTimer = setTimeout(() => this.refitAllPanes(), 80)
+    }
+    window.addEventListener('resize', this._onWinResize)
     // 启动时直接加载已保存的连接
     this.refreshConns()
+  },
+  beforeUnmount() {
+    if (this._onWinResize) window.removeEventListener('resize', this._onWinResize)
+    clearTimeout(this._resizeTimer)
   }
 }
 </script>

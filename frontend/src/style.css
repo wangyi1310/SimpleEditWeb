@@ -92,13 +92,12 @@ body {
 /* 侧栏宽度拖拽条 */
 .side-split { flex: none; width: 5px; cursor: col-resize; background: transparent; margin-left: -1px; z-index: 8; }
 .side-split:hover { background: var(--accent); }
-/* 侧栏收起后贴左边缘的展开条 */
+/* 侧栏收起后贴左边缘的展开条（占布局空间，不遮挡终端内容） */
 .side-rail {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 16px; z-index: 9;
+  flex: none; width: 16px; align-self: stretch;
   border: none; border-right: 1px solid var(--border);
   background: var(--panel); color: var(--text-dim);
   cursor: pointer; padding: 0; font-size: 10px; line-height: 1;
-  display: flex; align-items: center; justify-content: center;
 }
 .side-rail:hover { background: var(--accent); color: #fff; }
 .ssh-side-head {
