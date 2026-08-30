@@ -216,7 +216,7 @@ export default {
       sessionView: 'term',
       dragFrom: null,
       connDragFrom: null,
-      sshSideW: parseInt(localStorage.getItem('se.sshSideW') || '210'),
+      sshSideW: parseInt(localStorage.getItem('se.sshSideW2') || '280'),
       sshRootEl: null,
       // 弹窗 / toast
       connModal: null,
@@ -404,7 +404,7 @@ export default {
         window.removeEventListener('mouseup', up)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
-        localStorage.setItem('se.sshSideW', String(this.sshSideW))
+        localStorage.setItem('se.sshSideW2', String(this.sshSideW))
       }
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
