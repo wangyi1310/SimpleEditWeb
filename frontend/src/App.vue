@@ -47,9 +47,10 @@
 
       <!-- SSH 模式 -->
       <div v-if="mode === 'ssh'" class="ssh-root" :ref="el => (sshRootEl = el)">
-        <div class="ssh-side" :style="{ width: sshSideW + 'px' }">
+        <div class="ssh-side" v-show="!sshSideCollapsed" :style="{ width: sshSideW + 'px' }">
           <div class="ssh-side-head">
             <span>连接（{{ connections.length }}）</span>
+            <button @click="toggleSide" title="收起侧栏">◀</button>
             <button @click="addConn" title="新建连接">＋</button>
           </div>
           <div class="conn-item" v-for="(c, i) in connections" :key="c.id"
@@ -85,7 +86,10 @@
           </div>
         </div>
         <!-- 侧栏宽度拖拽条 -->
-        <div class="side-split" @mousedown="startSideResize"></div>
+        <div class="side-split" v-show="!sshSideCollapsed" @mousedown="startSideResize"></div>
+        <!-- 收起后贴边的展开条（三角） -->
+        <button class="side-rail" v-if="sshSideCollapsed" @click="toggleSide"
+                title="展开连接列表">▶</button>
         <div class="ssh-main">
           <!-- 标签栏（可拖拽排序） -->
           <div class="session-tabs" v-if="tabs.length > 0">
@@ -217,6 +221,7 @@ export default {
       dragFrom: null,
       connDragFrom: null,
       sshSideW: parseInt(localStorage.getItem('se.sshSideW2') || '280'),
+      sshSideCollapsed: localStorage.getItem('se.sshSideCollapsed') === '1',
       sshRootEl: null,
       // 弹窗 / toast
       connModal: null,
@@ -391,6 +396,21 @@ export default {
 
     // ===== SSH：连接管理 =====
     // 拖动调整左侧连接栏宽度（持久化）
+    // ===== SSH：侧栏折叠 / 宽度 =====
+    toggleSide() {
+      this.sshSideCollapsed = !this.sshSideCollapsed
+      localStorage.setItem('se.sshSideCollapsed', this.sshSideCollapsed ? '1' : '0')
+      // 宽度变化后让所有终端按新尺寸重新适配
+      this.$nextTick(() => {
+        for (const tab of this.tabs) {
+          for (const sid of tab.panes) {
+            const el = this._paneRefs && this._paneRefs[sid]
+            if (el && el.fitTerm) el.fitTerm()
+          }
+        }
+        this.focusActivePane()
+      })
+    },
     startSideResize(e) {
       const root = this.sshRootEl
       if (!root) return
