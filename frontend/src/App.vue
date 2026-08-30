@@ -64,7 +64,7 @@
             <span>{{ c.authType === 'key' ? '🔑' : '🖥' }}</span>
             <div style="flex:1; min-width:0">
               <div class="c-name">{{ c.name }}</div>
-              <div class="c-host">{{ c.host }}{{ c.port && c.port !== 22 ? ':' + c.port : '' }}</div>
+              <div class="c-host" :title="c.user + '@' + c.host + (c.port && c.port !== 22 ? ':' + c.port : '')">{{ c.user }}@{{ c.host }}{{ c.port && c.port !== 22 ? ':' + c.port : '' }}</div>
             </div>
             <div class="c-act">
               <button @click.stop="connect(c)" title="连接">▶</button>
@@ -99,7 +99,8 @@
                  @drop.prevent="moveTab(i)">
               <span class="dot" :class="tab.layout"></span>
               <span class="tname">{{ tab.name }}<em v-if="tab.panes.length > 1">×{{ tab.panes.length }}</em></span>
-              <span class="x" @click.stop="closeTab(tab)">✕</span>
+              <span class="x" @click.stop="duplicateTab(tab)" title="复制终端（同连接新开标签）">⧉</span>
+              <span class="x" @click.stop="closeTab(tab)" title="关闭">✕</span>
             </div>
           </div>
 
@@ -489,13 +490,23 @@ export default {
       tab.activePane = p
       if (this.sessionView === 'term') this.focusActivePane()
     },
+    // 复制终端：用同一连接配置新开一个标签（独立会话）
+    async duplicateTab(tab) {
+      const conn = this.connections.find(c => c.id === tab.connId)
+      if (!conn) { this.toast('找不到连接配置'); return }
+      await this.connect(conn)
+    },
     async closeTab(tab) {
-      for (const p of tab.panes) { try { await CloseSession(p) } catch (e) { /* 忽略 */ } }
       const idx = this.tabs.indexOf(tab)
+      if (idx < 0) return // 已被 onPaneExit 递归移除，直接返回防止 splice(-1) 误删末尾标签
       this.tabs.splice(idx, 1)
       if (this.activeTabId === tab.id) {
         this.activeTabId = this.tabs.length ? this.tabs[Math.min(idx, this.tabs.length - 1)].id : ''
       }
+      // 先清空 panes 再逐个关会话：CloseSession 触发的 exit 事件回来时
+      // onPaneExit 找不到 pane，就不会递归 closeTab 造成误删
+      const panes = tab.panes.splice(0)
+      for (const p of panes) { try { await CloseSession(p) } catch (e) { /* 忽略 */ } }
     },
     switchTab(delta) {
       if (!this.tabs.length) return

@@ -113,7 +113,7 @@ body {
 }
 .conn-item .drag-grip:active { cursor: grabbing; }
 .conn-item .c-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conn-item .c-host { font-size: 11px; color: var(--text-dim); }
+.conn-item .c-host { font-size: 11px; color: var(--text-dim); line-height: 1.35; word-break: break-all; white-space: normal; }
 .conn-item .c-act { opacity: 0; display: flex; gap: 2px; }
 .conn-item:hover .c-act { opacity: 1; }
 .conn-item .c-act button {
