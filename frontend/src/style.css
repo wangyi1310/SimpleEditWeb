@@ -215,6 +215,17 @@ body {
 .sftp-btn:hover { background: #f0f3f7; }
 .sftp-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .sftp-btn.primary:hover { background: var(--accent-hover); }
+/* 传输进度条（上传/下载） */
+.sftp-progress { flex: none; padding: 8px 12px; background: #f5f8ff; border-bottom: 1px solid var(--border); }
+.sp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: var(--text); margin-bottom: 6px; gap: 10px;
+}
+.sp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-name em { color: var(--text-dim); font-style: normal; }
+.sp-num { flex: none; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.sp-bar { height: 5px; border-radius: 3px; background: #e3e8f0; overflow: hidden; }
+.sp-bar > i { display: block; height: 100%; background: var(--accent); transition: width 0.15s linear; }
 .sftp-list { flex: 1; overflow: auto; }
 .sftp-row {
   display: flex; align-items: center; gap: 8px;

@@ -7,6 +7,18 @@
       <button class="sftp-btn" @click="mkdir" title="新建文件夹">+ 目录</button>
       <button class="sftp-btn primary" @click="upload" title="上传文件">⬆ 上传</button>
     </div>
+    <!-- 传输进度条 -->
+    <div class="sftp-progress" v-if="prog">
+      <div class="sp-head">
+        <span class="sp-name">
+          {{ prog.op === 'upload' ? '⬆ 上传' : '⬇ 下载' }}
+          {{ prog.name }}
+          <em v-if="prog.total > 1">（{{ prog.index }}/{{ prog.total }}）</em>
+        </span>
+        <span class="sp-num">{{ prog.percent }}% · {{ fmtSize(prog.sent) }} / {{ fmtSize(prog.size) }}</span>
+      </div>
+      <div class="sp-bar"><i :style="{ width: prog.percent + '%' }"></i></div>
+    </div>
     <div class="sftp-list">
       <div class="sftp-row header">
         <span class="f-icon"></span>
@@ -34,15 +46,26 @@
 
 <script>
 import { SftpList, SftpMkdir, SftpRemove, SftpDownload, SftpUpload, SftpReadFile, SftpWriteFile } from '../../wailsjs/go/main/SSHManager'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 
 export default {
   name: 'SftpPanel',
   props: { sessionId: { type: String, required: true } },
   emits: ['open-file', 'save-file', 'toast'],
   data() {
-    return { path: '', inputPath: '', entries: [], loading: false }
+    return { path: '', inputPath: '', entries: [], loading: false, prog: null, offProg: null }
   },
   methods: {
+    // 显示进度条；done 且是最后一个文件时延迟 600ms 隐藏
+    onProgress(p) {
+      this.prog = p
+      if (p.done) {
+        clearTimeout(this._hideTimer)
+        this._hideTimer = setTimeout(() => {
+          if (this.prog && this.prog.index === this.prog.total) this.prog = null
+        }, 600)
+      }
+    },
     fmtSize(n) {
       if (n < 1024) return n + ' B'
       if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
@@ -93,17 +116,25 @@ export default {
     async download(e) {
       try {
         const local = await SftpDownload(this.sessionId, this.join(this.path, e.name))
+        this.prog = null
         if (local) this.$emit('toast', '已下载到: ' + local)
-      } catch (err) { this.$emit('toast', '下载失败: ' + err) }
+      } catch (err) {
+        this.prog = null
+        this.$emit('toast', '下载失败: ' + err)
+      }
     },
     async upload() {
       try {
         const n = await SftpUpload(this.sessionId, this.path)
+        this.prog = null
         if (n > 0) {
           this.$emit('toast', `已上传 ${n} 个文件`)
           this.load(this.path)
         }
-      } catch (e) { this.$emit('toast', '上传失败: ' + e) }
+      } catch (e) {
+        this.prog = null
+        this.$emit('toast', '上传失败: ' + e)
+      }
     },
     async openFile(e) {
       try {
@@ -121,8 +152,13 @@ export default {
     }
   },
   async mounted() {
+    this.offProg = EventsOn('sftp:progress:' + this.sessionId, p => this.onProgress(p))
     // 默认从根目录开始，用户可自行输入路径
     await this.load('/')
+  },
+  beforeUnmount() {
+    if (this.offProg) this.offProg()
+    clearTimeout(this._hideTimer)
   }
 }
 </script>

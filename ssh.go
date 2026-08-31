@@ -26,6 +26,50 @@ type SftpEntry struct {
 	ModTime string `json:"modTime"`
 }
 
+// SftpProgress 上传/下载进度（事件 sftp:progress:<sessionID>）
+type SftpProgress struct {
+	Op      string `json:"op"`      // "upload" | "download"
+	Name    string `json:"name"`    // 文件名
+	Index   int    `json:"index"`   // 第几个文件，从 1 开始
+	Total   int    `json:"total"`   // 本次共几个文件
+	Sent    int64  `json:"sent"`    // 已传输字节
+	Size    int64  `json:"size"`    // 文件总字节
+	Percent int    `json:"percent"` // 0-100
+	Done    bool   `json:"done"`    // 该文件是否传输完成
+}
+
+// progressWriter 边写边上报进度（按百分比变化 + 150ms 节流）
+type progressWriter struct {
+	m         *SSHManager
+	sessionID string
+	p         *SftpProgress
+	lastPct   int
+	last      time.Time
+}
+
+func (w *progressWriter) Write(b []byte) (int, error) {
+	n := len(b)
+	w.p.Sent += int64(n)
+	pct := 0
+	if w.p.Size > 0 {
+		pct = int(w.p.Sent * 100 / w.p.Size)
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	if pct != w.lastPct && (time.Since(w.last) > 150*time.Millisecond || pct == 100) {
+		w.lastPct = pct
+		w.last = time.Now()
+		w.p.Percent = pct
+		w.m.emit("sftp:progress:"+w.sessionID, *w.p)
+	}
+	return n, nil
+}
+
+func (m *SSHManager) emitProgress(sessionID string, p *SftpProgress) {
+	m.emit("sftp:progress:"+sessionID, *p)
+}
+
 type sshSession struct {
 	id      string
 	connID  string
@@ -354,14 +398,25 @@ func (m *SSHManager) SftpDownload(sessionID, remotePath string) (string, error) 
 		return "", err
 	}
 	defer rf.Close()
+	st, _ := rf.Stat()
+	p := &SftpProgress{Op: "download", Name: filepath.Base(remotePath), Index: 1, Total: 1}
+	if st != nil {
+		p.Size = st.Size()
+	}
+	m.emitProgress(sessionID, p)
 	lf, err := os.Create(local)
 	if err != nil {
 		return "", err
 	}
 	defer lf.Close()
-	if _, err := io.Copy(lf, rf); err != nil {
+	pw := &progressWriter{m: m, sessionID: sessionID, p: p, last: time.Now()}
+	if _, err := io.Copy(io.MultiWriter(lf, pw), rf); err != nil {
 		return "", err
 	}
+	p.Done = true
+	p.Percent = 100
+	p.Sent = p.Size
+	m.emitProgress(sessionID, p)
 	return local, nil
 }
 
@@ -379,24 +434,38 @@ func (m *SSHManager) SftpUpload(sessionID, remoteDir string) (int, error) {
 	}
 	ok := 0
 	var lastErr error
-	for _, local := range files {
+	total := len(files)
+	for i, local := range files {
+		name := filepath.Base(local)
+		p := &SftpProgress{Op: "upload", Name: name, Index: i + 1, Total: total}
+		if st, err := os.Stat(local); err == nil {
+			p.Size = st.Size()
+		}
+		m.emitProgress(sessionID, p)
+
 		lf, err := os.Open(local)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		remote := remoteDir + "/" + filepath.Base(local)
+		remote := remoteDir + "/" + name
 		rf, err := cl.Create(remote)
 		if err != nil {
 			lf.Close()
 			lastErr = err
 			continue
 		}
-		if _, err := io.Copy(rf, lf); err != nil {
+		pw := &progressWriter{m: m, sessionID: sessionID, p: p, last: time.Now()}
+		if _, err := io.Copy(io.MultiWriter(rf, pw), lf); err != nil {
 			lastErr = err
 		} else {
 			ok++
 		}
+		// 收尾：强制上报 100%，前端据此清理进度条
+		p.Done = true
+		p.Percent = 100
+		p.Sent = p.Size
+		m.emitProgress(sessionID, p)
 		lf.Close()
 		rf.Close()
 	}
