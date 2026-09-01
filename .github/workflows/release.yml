@@ -98,7 +98,8 @@ jobs:
             "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
           ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
           if ($iscc) {
-            & $iscc ".github\installer\windows\setup.iss" "/DMyAppVersion=$ver" "/O$PWD\build\bin"
+            $src = "$PWD\build\bin\SimpleEditWeb.exe"
+            & $iscc ".github\installer\windows\setup.iss" "/DMyAppVersion=$ver" "/DMyAppSource=$src" "/O$PWD\build\bin"
           } else {
             Write-Warning "未找到 ISCC.exe，跳过安装程序"
           }

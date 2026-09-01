@@ -7,6 +7,11 @@
   #define MyAppVersion "0.0.0"
 #endif
 
+; 由 GitHub Actions 传入绝对路径：/DMyAppSource=D:\...\build\bin\SimpleEditWeb.exe
+#ifndef MyAppSource
+  #define MyAppSource "..\..\..\build\bin\SimpleEditWeb.exe"
+#endif
+
 #define MyAppName "SimpleEditWeb"
 #define MyAppPublisher "wangyi1310"
 #define MyAppURL "https://github.com/wangyi1310/SimpleEditWeb"
@@ -46,7 +51,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Files]
-Source: "..\..\build\bin\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyAppSource}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
