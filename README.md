@@ -46,10 +46,25 @@ git tag v3.5.0
 git push origin v3.5.0
 ```
 
-产物清单（每个平台含压缩包 + 未压缩裸二进制 + `.sha256` 校验）：
+产物清单（每个平台含**安装包** + 压缩包 + 裸二进制 + `.sha256` 校验）：
 
-| 平台 | 压缩包 | 裸二进制 |
-|---|---|---|
-| macOS（Apple Silicon + Intel 通用） | `SimpleEditWeb-macos-universal.zip` | `SimpleEditWeb-macos-universal` |
-| Windows amd64 | `SimpleEditWeb-windows-amd64.zip` | `SimpleEditWeb-windows-amd64.exe` |
-| Linux amd64 | `SimpleEditWeb-linux-amd64.tar.gz` | `SimpleEditWeb-linux-amd64` |
+| 平台 | 安装包（推荐） | 压缩包 | 裸二进制 |
+|---|---|---|---|
+| macOS（Apple Silicon + Intel 通用） | `SimpleEditWeb-macos-universal.dmg` | `.zip` | `SimpleEditWeb-macos-universal` |
+| Windows amd64 | `SimpleEditWeb-windows-setup.exe` | `.zip` | `.exe` |
+| Linux amd64 | `SimpleEditWeb-linux-amd64.deb` | `.tar.gz` | `SimpleEditWeb-linux-amd64` |
+
+### 安装方式
+
+**macOS**：下载 `.dmg` → 双击打开 → 把 SimpleEditWeb 拖进 Applications。
+> 首次打开若提示「无法验证开发者」，右键应用 → 打开，或在终端执行
+> `xattr -cr /Applications/SimpleEditWeb.app` 后重试。
+
+**Windows**：下载 `SimpleEditWeb-windows-setup.exe` 双击安装（自动创建开始菜单/桌面快捷方式、支持卸载），SmartScreen 提示时点「更多信息 → 仍要运行」。
+
+**Linux（Debian/Ubuntu）**：
+```bash
+sudo apt install ./SimpleEditWeb-linux-amd64.deb
+# 安装后可在应用菜单找到，或命令行 simpleeditweb 启动
+```
+其他发行版用 `tar.gz` 解压后直接运行 `SimpleEditWeb` 二进制。

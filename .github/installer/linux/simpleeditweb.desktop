@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SimpleEditWeb
+GenericName=Text Editor
+Comment=轻量跨平台文本编辑器，内置 Markdown 预览与 SSH 终端
+Exec=simpleeditweb
+Icon=simpleeditweb
+Terminal=false
+Categories=Utility;TextEditor;Development;
+Keywords=editor;ssh;terminal;markdown;
+StartupWMClass=SimpleEditWeb

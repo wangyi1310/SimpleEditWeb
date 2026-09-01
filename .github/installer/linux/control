@@ -1,0 +1,12 @@
+Package: simpleeditweb
+Version: __VERSION__
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1
+Maintainer: wangyi1310 <jifeng@pplabs.org>
+Homepage: https://github.com/wangyi1310/SimpleEditWeb
+Description: 轻量跨平台文本编辑器与 SSH 终端
+ SimpleEditWeb 基于 Wails(Go) + Vue3 构建：内置 CodeMirror 6 编辑器（自动识别
+ UTF-8/GBK 等编码）、Markdown 实时预览、iTerm2 风格的 SSH 终端（标签 + 分屏）
+ 以及带传输进度的 SFTP 文件管理。

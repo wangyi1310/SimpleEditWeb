@@ -62,37 +62,79 @@ jobs:
         if: runner.os == 'Linux'
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
 
-      - name: Package (macOS)
+      - name: Package (macOS, DMG + zip + 裸二进制)
         if: runner.os == 'macOS'
         run: |
           cd build/bin
+          # DMG：拖拽到 Applications 的标准安装方式
+          brew install create-dmg >/dev/null 2>&1 || true
+          if command -v create-dmg >/dev/null 2>&1; then
+            create-dmg \
+              --volname "SimpleEditWeb" \
+              --window-pos 200 120 --window-size 720 420 \
+              --icon-size 100 \
+              --icon "SimpleEditWeb.app" 180 200 \
+              --hide-extension "SimpleEditWeb.app" \
+              --app-drop-link 540 200 \
+              --skip-jenkins --no-internet-enable \
+              "${{ matrix.artifact }}.dmg" "SimpleEditWeb.app" \
+              || echo "::warning::create-dmg 失败，跳过 DMG（zip 仍然提供）"
+          fi
           ditto -c -k --keepParent SimpleEditWeb.app "${{ matrix.artifact }}.zip"
           cp SimpleEditWeb.app/Contents/MacOS/SimpleEditWeb "${{ matrix.artifact }}"
 
-      - name: Package (Windows)
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      - name: Package (Windows, 安装程序 + zip + 裸二进制)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if ($iscc) {
+            & $iscc ".github\installer\windows\setup.iss" "/DMyAppVersion=$ver" "/O$PWD\build\bin"
+          } else {
+            Write-Warning "未找到 ISCC.exe，跳过安装程序"
+          }
           Compress-Archive -Path "build\bin\SimpleEditWeb.exe" -DestinationPath "build\bin\${{ matrix.artifact }}.zip"
           Copy-Item "build\bin\SimpleEditWeb.exe" "build\bin\${{ matrix.artifact }}.exe"
 
-      - name: Package (Linux)
+      - name: Package (Linux, deb + tar.gz + 裸二进制)
         if: runner.os == 'Linux'
         run: |
           cd build/bin
           tar -czf "${{ matrix.artifact }}.tar.gz" SimpleEditWeb
           cp SimpleEditWeb "${{ matrix.artifact }}"
+          # .deb 安装包：sudo dpkg -i 即可安装到 /usr/bin
+          VER="${{ github.ref_name }}"; VER="${VER#v}"
+          PKG="simpleeditweb_${VER}_amd64"
+          rm -rf "$PKG" "$PKG.deb"
+          mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications"
+          install -m 0755 SimpleEditWeb "$PKG/usr/bin/simpleeditweb"
+          cp "$GITHUB_WORKSPACE/.github/installer/linux/simpleeditweb.desktop" "$PKG/usr/share/applications/"
+          sed "s/__VERSION__/${VER}/" "$GITHUB_WORKSPACE/.github/installer/linux/control" > "$PKG/DEBIAN/control"
+          chmod 0644 "$PKG/DEBIAN/control" "$PKG/usr/share/applications/simpleeditweb.desktop"
+          dpkg-deb --root-owner-group --build "$PKG"
+          mv "$PKG.deb" "${{ matrix.artifact }}.deb"
 
       - name: Generate checksum
         shell: bash
         run: |
           cd build/bin
-          case "${{ runner.os }}" in
-            Linux)   FILES="${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}" ;;
-            Windows) FILES="${{ matrix.artifact }}.zip ${{ matrix.artifact }}.exe" ;;
-            macOS)   FILES="${{ matrix.artifact }}.zip ${{ matrix.artifact }}" ;;
-          esac
-          sha256sum $FILES > "${{ matrix.artifact }}.sha256"
+          FILES=$(ls | grep -E '^SimpleEditWeb-.*\.(zip|tar\.gz|dmg|deb|exe)$' | sort)
+          if [ -n "$FILES" ]; then
+            sha256sum $FILES > "${{ matrix.artifact }}.sha256"
+          else
+            sha256sum SimpleEditWeb-* > "${{ matrix.artifact }}.sha256"
+          fi
+          echo "--- ${{ matrix.artifact }} 产物 ---"
+          ls -lh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
