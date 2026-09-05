@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,6 +22,15 @@ type OpenResult struct {
 	Path     string `json:"path"`
 	Content  string `json:"content"`
 	Encoding string `json:"encoding"`
+}
+
+// LocalEntry 本地目录条目（目录树）
+type LocalEntry struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	IsDir   bool   `json:"isDir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"modTime"`
 }
 
 // App 主应用结构
@@ -143,6 +153,62 @@ func (a *App) SaveAsTextFile(content, encoding string) (string, error) {
 	return path, nil
 }
 
+// ---- 目录树（打开文件夹）----
+
+// OpenFolderDialog 弹出系统目录选择框，返回所选目录绝对路径（取消返回空串）
+func (a *App) OpenFolderDialog() (string, error) {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择要打开的文件夹",
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// ListLocalDir 列出本地目录：目录在前、名称不区分大小写排序
+func (a *App) ListLocalDir(dir string) ([]LocalEntry, error) {
+	if dir == "" {
+		dir = "/"
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("读取目录失败: %w", err)
+	}
+	out := make([]LocalEntry, 0, len(entries))
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue // 无权限等条目跳过，不让整棵树挂掉
+		}
+		le := LocalEntry{
+			Name:    e.Name(),
+			Path:    filepath.Join(dir, e.Name()),
+			IsDir:   e.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format("2006-01-02 15:04"),
+		}
+		out = append(out, le)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].IsDir != out[j].IsDir {
+			return out[i].IsDir // 目录在前
+		}
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out, nil
+}
+
+// ReadLocalPath 直接按绝对路径读取本地文件（自动识别编码），不弹对话框
+func (a *App) ReadLocalPath(path string) (*OpenResult, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取失败: %w", err)
+	}
+	content, enc := decodeBytes(raw)
+	return &OpenResult{Path: path, Content: content, Encoding: enc}, nil
+}
+
 // ---- 连接配置（明文 JSON，保存后直接可用）----
 
 // ListConnections 列出全部连接
@@ -222,5 +288,3 @@ func (a *App) DeleteConnection(id string) error {
 
 // NowTimestamp 返回当前时间戳（前端标题栏用）
 func (a *App) NowTimestamp() string { return time.Now().Format("2006-01-02 15:04:05") }
-
-var _ = filepath.Join

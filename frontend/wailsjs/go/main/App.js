@@ -10,12 +10,24 @@ export function ListConnections() {
   return window['go']['main']['App']['ListConnections']();
 }
 
+export function ListLocalDir(arg1) {
+  return window['go']['main']['App']['ListLocalDir'](arg1);
+}
+
 export function NowTimestamp() {
   return window['go']['main']['App']['NowTimestamp']();
 }
 
+export function OpenFolderDialog() {
+  return window['go']['main']['App']['OpenFolderDialog']();
+}
+
 export function OpenTextFile() {
   return window['go']['main']['App']['OpenTextFile']();
+}
+
+export function ReadLocalPath(arg1) {
+  return window['go']['main']['App']['ReadLocalPath'](arg1);
 }
 
 export function ReorderConnections(arg1) {

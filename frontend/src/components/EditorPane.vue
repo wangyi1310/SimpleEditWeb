@@ -62,6 +62,15 @@ export default {
       return this.view ? this.view.state.doc.toString() : ''
     },
     focus() { if (this.view) this.view.focus() },
+    // 容器尺寸变化（目录树折叠/调宽等）后强制 CodeMirror 重新测量
+    measure() {
+      this.$nextTick(() => {
+        if (this.view) {
+          this.view.requestMeasure()
+          requestAnimationFrame(() => this.view && this.view.requestMeasure())
+        }
+      })
+    },
     applyTheme() {
       if (!this.view) return
       this.view.dispatch({ effects: this.themeComp.reconfigure(this.mkTheme()) })

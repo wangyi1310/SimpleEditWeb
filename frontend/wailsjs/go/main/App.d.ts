@@ -6,9 +6,15 @@ export function DeleteConnection(arg1:string):Promise<void>;
 
 export function ListConnections():Promise<Array<main.Connection>>;
 
+export function ListLocalDir(arg1:string):Promise<Array<main.LocalEntry>>;
+
 export function NowTimestamp():Promise<string>;
 
+export function OpenFolderDialog():Promise<string>;
+
 export function OpenTextFile():Promise<main.OpenResult>;
+
+export function ReadLocalPath(arg1:string):Promise<main.OpenResult>;
 
 export function ReorderConnections(arg1:Array<string>):Promise<void>;
 

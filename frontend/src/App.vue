@@ -6,6 +6,7 @@
       <template v-if="mode === 'editor'">
         <button class="tb-btn" @click="newDoc" title="新建 ⌘N">新建</button>
         <button class="tb-btn" @click="openFile" title="打开 ⌘O">打开</button>
+        <button class="tb-btn" :class="{ active: !!workRoot }" @click="openFolder" title="打开文件夹（左侧显示目录树）">📂 文件夹</button>
         <button class="tb-btn" @click="save" title="保存 ⌘S">保存</button>
         <button class="tb-btn" @click="saveAs" title="另存为 ⇧⌘S">另存为</button>
         <span class="tb-sep"></span>
@@ -31,18 +32,39 @@
     <!-- 主体 -->
     <div class="app-main">
       <!-- 编辑器模式 -->
-      <EditorPane
-        v-show="mode === 'editor' && docReady"
-        ref="editor"
-        :font-size="fontSize"
-        :word-wrap="wordWrap"
-        :preview="mdPreview"
-        @status="s => status = s"
-        @change="doc.dirty = true"
-      />
-      <div v-if="mode === 'editor' && !docReady" class="empty-hint">
-        <div style="font-size: 34px">📝</div>
-        <div>按 <kbd>⌘O</kbd> 打开文件，<kbd>⌘N</kbd> 新建，或点击工具栏按钮</div>
+      <div v-show="mode === 'editor'" class="work-root" :ref="el => (workRootEl = el)">
+        <!-- 左侧目录树（打开文件夹后出现，可折叠/调宽） -->
+        <template v-if="workRoot">
+          <div class="work-side" v-show="!workCollapsed" :style="{ width: workSideW + 'px' }">
+            <div class="work-side-head">
+              <span class="ws-title" :title="workRoot.path">📂 {{ workRoot.name }}</span>
+              <button @click="toggleWorkSide" title="收起目录树">◀</button>
+            </div>
+            <FileTree :nodes="[workRoot]" :depth="0" :active-path="doc.path"
+                      @open="openTreeFile" @toast="toast" />
+            <div class="work-side-foot">
+              <button class="tree-close-btn" @click="closeFolder" title="关闭当前文件夹">关闭文件夹</button>
+            </div>
+          </div>
+          <div class="side-split" v-show="!workCollapsed" @mousedown="startWorkResize"></div>
+          <button v-if="workCollapsed" class="side-rail" @click="toggleWorkSide" title="展开目录树">📂</button>
+        </template>
+
+        <div class="work-main">
+          <EditorPane
+            v-show="docReady"
+            ref="editor"
+            :font-size="fontSize"
+            :word-wrap="wordWrap"
+            :preview="mdPreview"
+            @status="s => status = s"
+            @change="doc.dirty = true"
+          />
+          <div v-if="!docReady" class="empty-hint">
+            <div style="font-size: 34px">📝</div>
+            <div>按 <kbd>⌘O</kbd> 打开文件、<kbd>⌘N</kbd> 新建，<br />或点工具栏「📂 文件夹」打开整个目录在左侧浏览</div>
+          </div>
+        </div>
       </div>
 
       <!-- SSH 模式 -->
@@ -188,8 +210,10 @@ import EditorPane from './components/EditorPane.vue'
 import TerminalPane from './components/TerminalPane.vue'
 import SftpPanel from './components/SftpPanel.vue'
 import ConnectionModal from './components/ConnectionModal.vue'
+import FileTree from './components/FileTree.vue'
 import {
   OpenTextFile, SaveTextFile, SaveAsTextFile,
+  OpenFolderDialog, ListLocalDir, ReadLocalPath,
   ListConnections, SaveConnection, DeleteConnection, ReorderConnections
 } from '../wailsjs/go/main/App'
 import { Connect, CloseSession, SftpWriteFile } from '../wailsjs/go/main/SSHManager'
@@ -200,7 +224,7 @@ function uid(prefix) {
 
 export default {
   name: 'App',
-  components: { EditorPane, TerminalPane, SftpPanel, ConnectionModal },
+  components: { EditorPane, TerminalPane, SftpPanel, ConnectionModal, FileTree },
   data() {
     return {
       mode: 'editor',
@@ -209,6 +233,11 @@ export default {
       docReady: false,
       status: { line: 1, col: 1, chars: 0, lines: 1, selected: 0 },
       mdPreview: false,
+      // 工作区（打开文件夹后的目录树）
+      workRoot: null,          // { name, path, isDir:true, open, loaded, children:[] }
+      workCollapsed: localStorage.getItem('se.workCollapsed') === '1',
+      workSideW: parseInt(localStorage.getItem('se.workSideW') || '240'),
+      workRootEl: null,
       // 设置（localStorage 持久化）
       fontSize: parseInt(localStorage.getItem('se.fontSize') || '14'),
       wordWrap: localStorage.getItem('se.wordWrap') !== '0',
@@ -317,6 +346,92 @@ export default {
     activePaneSessionOf(tab) {
       if (!tab || !tab.panes.length) return ''
       return tab.panes.includes(tab.activePane) ? tab.activePane : tab.panes[0]
+    },
+
+    // ===== 工作区（打开文件夹 / 目录树） =====
+    async openFolder() {
+      try {
+        const p = await OpenFolderDialog()
+        if (!p) return
+        await this.setRoot(p)
+        localStorage.setItem('se.workRoot', p)
+        this.toast('已打开文件夹: ' + p)
+      } catch (e) { this.toast('打开文件夹失败: ' + e) }
+    },
+    // 载入并展开一个目录作为工作区根
+    async setRoot(p) {
+      const clean = String(p).replace(/[\\/]+$/, '')
+      const name = clean.split('/').pop() || clean
+      this.workRoot = { name, path: clean, isDir: true, open: true, loaded: false, loading: false, children: [] }
+      try {
+        const list = await ListLocalDir(clean)
+        this.workRoot.children = (list || []).map(e => ({
+          name: e.name, path: e.path, isDir: e.isDir, size: e.size, modTime: e.modTime,
+          open: false, loaded: false, loading: false, children: []
+        }))
+        this.workRoot.loaded = true
+      } catch (e) {
+        this.workRoot.loaded = true
+        this.toast('读取目录失败: ' + e)
+      }
+      this.measureEditor()
+    },
+    // 从目录树点击文件：读取并载入编辑器
+    async openTreeFile(n) {
+      if (!await this.confirmDiscard()) return
+      try {
+        const r = await ReadLocalPath(n.path)
+        this.doc = { path: r.path, name: n.name, encoding: r.encoding, dirty: false, remote: null }
+        this.mdPreview = /\.md$|\.markdown$/i.test(n.path)
+        this.docReady = true
+        this.$nextTick(() => {
+          this.$refs.editor.initDoc(r.content, r.path)
+          this.$refs.editor.focus()
+        })
+      } catch (e) { this.toast('打开失败: ' + e) }
+    },
+    closeFolder() {
+      this.workRoot = null
+      localStorage.removeItem('se.workRoot')
+    },
+    toggleWorkSide() {
+      this.workCollapsed = !this.workCollapsed
+      localStorage.setItem('se.workCollapsed', this.workCollapsed ? '1' : '0')
+      this.measureEditor()
+    },
+    startWorkResize(e) {
+      const root = this.workRootEl
+      if (!root) return
+      e.preventDefault()
+      const rect = root.getBoundingClientRect()
+      const move = ev => {
+        this.workSideW = Math.max(150, Math.min(560, ev.clientX - rect.left))
+      }
+      const up = () => {
+        window.removeEventListener('mousemove', move)
+        window.removeEventListener('mouseup', up)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        localStorage.setItem('se.workSideW', String(this.workSideW))
+        this.measureEditor()
+      }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      window.addEventListener('mousemove', move)
+      window.addEventListener('mouseup', up)
+    },
+    // 侧栏显隐/宽度变化后让 CodeMirror 重新测量布局
+    measureEditor() {
+      this.$nextTick(() => {
+        const ed = this.$refs.editor
+        if (ed && ed.measure) ed.measure()
+      })
+    },
+    // 启动时恢复上次打开的文件夹
+    async restoreWorkRoot() {
+      const p = localStorage.getItem('se.workRoot')
+      if (!p) return
+      try { await this.setRoot(p) } catch (e) { localStorage.removeItem('se.workRoot') }
     },
 
     // ===== 文件 =====
@@ -602,8 +717,9 @@ export default {
       this._resizeTimer = setTimeout(() => this.refitAllPanes(), 80)
     }
     window.addEventListener('resize', this._onWinResize)
-    // 启动时直接加载已保存的连接
+    // 启动时直接加载已保存的连接 + 恢复上次打开的文件夹
     this.refreshConns()
+    this.restoreWorkRoot()
   },
   beforeUnmount() {
     if (this._onWinResize) window.removeEventListener('resize', this._onWinResize)
