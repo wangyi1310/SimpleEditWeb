@@ -196,6 +196,18 @@
     <!-- 弹窗 -->
     <ConnectionModal v-if="connModal" :conn="connModal" @close="connModal = null" @saved="onConnSaved" />
 
+    <!-- 确认对话框（应用内实现，替代 window.confirm，跨平台可靠） -->
+    <div v-if="dlg" class="dlg-mask" @mousedown.self="resolveDlg(false)">
+      <div class="dlg-box">
+        <div class="dlg-title">{{ dlg.title }}</div>
+        <div class="dlg-msg">{{ dlg.msg }}</div>
+        <div class="dlg-acts">
+          <button class="dlg-btn" @click="resolveDlg(false)">取消</button>
+          <button class="dlg-btn primary" :class="{ danger: dlg.danger }" @click="resolveDlg(true)">{{ dlg.okText || '确定' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast -->
     <div v-if="toastMsg" style="position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
          background: #24292f; color: #fff; padding: 8px 18px; border-radius: 6px;
@@ -254,6 +266,8 @@ export default {
       sshRootEl: null,
       // 弹窗 / toast
       connModal: null,
+      dlg: null,
+      _dlgRes: null,
       toastMsg: '',
       toastTimer: null
     }
@@ -277,6 +291,17 @@ export default {
       this.toastMsg = String(msg)
       clearTimeout(this.toastTimer)
       this.toastTimer = setTimeout(() => { this.toastMsg = '' }, 3200)
+    },
+    // 应用内确认框：resolveDlg(true/false) 后返回 Promise<boolean>
+    askDlg({ title = '提示', msg = '', okText = '确定', danger = false } = {}) {
+      this.dlg = { title, msg, okText, danger }
+      return new Promise(res => { this._dlgRes = res })
+    },
+    resolveDlg(v) {
+      const res = this._dlgRes
+      this._dlgRes = null
+      this.dlg = null
+      if (res) res(!!v)
     },
     panesOf(tab) { return tab.panes },
     setPaneRef(sid, el) {
@@ -436,8 +461,12 @@ export default {
 
     // ===== 文件 =====
     async confirmDiscard() {
-      if (this.doc.dirty && !confirm(`"${this.docTitle()}" 有未保存的修改，继续将丢失。确定？`)) return false
-      return true
+      if (!this.doc.dirty) return true
+      return this.askDlg({
+        title: '未保存的修改',
+        msg: `“${this.docTitle()}” 有未保存的修改，继续将丢失。确定？`,
+        okText: '继续并丢弃'
+      })
     },
     docTitle() {
       return this.doc.remote ? this.doc.name : (this.doc.name || '未命名')
@@ -596,7 +625,8 @@ export default {
       } catch (e) { this.toast('保存失败: ' + e) }
     },
     async delConn(c) {
-      if (!confirm(`删除连接「${c.name}」？`)) return
+      const ok = await this.askDlg({ title: '删除连接', msg: `删除连接「${c.name}」？`, okText: '删除', danger: true })
+      if (!ok) return
       try {
         await DeleteConnection(c.id)
         await this.refreshConns()

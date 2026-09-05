@@ -52,10 +52,16 @@ export default {
   methods: {
     initDoc(content, path) {
       if (!this.view) return
-      this.view.dispatch({
-        changes: { from: 0, to: this.view.state.doc.length, insert: content || '' },
-        effects: this.langComp.reconfigure(langFor(path))
-      })
+      // 程序化替换全文：抑制 change 事件，避免被误标为 dirty
+      this._initBusy = true
+      try {
+        this.view.dispatch({
+          changes: { from: 0, to: this.view.state.doc.length, insert: content || '' },
+          effects: this.langComp.reconfigure(langFor(path))
+        })
+      } finally {
+        this._initBusy = false
+      }
       if (this.preview) this.$nextTick(() => this.renderPreview())
     },
     getContent() {
@@ -174,10 +180,13 @@ export default {
         this.langComp.of([]),
         EditorView.updateListener.of(u => {
           if (u.docChanged) {
-            this.$emit('change')
-            if (this.preview) {
-              clearTimeout(this.pvTimer)
-              this.pvTimer = setTimeout(() => this.renderPreview(), 120)
+            // 程序化载入文档不算用户编辑，不置脏
+            if (!this._initBusy) {
+              this.$emit('change')
+              if (this.preview) {
+                clearTimeout(this.pvTimer)
+                this.pvTimer = setTimeout(() => this.renderPreview(), 120)
+              }
             }
           }
           if (u.docChanged || u.selectionSet) this.emitStatus()
