@@ -25,12 +25,14 @@ import mermaid from 'mermaid'
 mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' })
 
 const mdRenderer = new Renderer()
-// 代码块：language 为 mermaid 时转成占位块，渲染完成后交给 mermaid 画图
+// 解析期间收集的 mermaid 围栏源码（与渲染结果里的占位块一一对应）
+let mmdFences = []
+// 代码块：language 为 mermaid 时留占位，渲染完成后交给 mermaid 画图
 mdRenderer.code = (code, infostring) => {
   const lang = (infostring || '').trim().split(/\s+/)[0].toLowerCase()
   if (lang === 'mermaid') {
-    const src = encodeURIComponent(code || '')
-    return `<div class="pv-mermaid" data-src="${src}"><pre class="pv-mmd-load">渲染中…</pre></div>`
+    mmdFences.push(code || '')
+    return '<div class="pv-mermaid"><pre class="pv-mmd-load">渲染中…</pre></div>'
   }
   return false // 其它语言走默认高亮/代码块
 }
@@ -151,25 +153,29 @@ export default {
       const el = this.$refs.pv
       if (!el) return
       const src = this.getContent() || ''
+      mmdFences = []
       let html = ''
       try { html = marked.parse(src, { renderer: mdRenderer }) } catch (e) { html = '<p class="pv-err">渲染失败: ' + e + '</p>' }
       el.innerHTML = DOMPurify.sanitize(html)
-      this.renderMermaids(el)
+      this.renderMermaids(el, mmdFences)
+      mmdFences = []
     },
-    // 逐个渲染 ```mermaid 代码块（异步, 带竞态与断连保护）
-    renderMermaids(container) {
+    // 逐个渲染 mermaid 围栏（异步, 带竞态与断连保护）
+    renderMermaids(container, fences) {
       const seq = (this._pvSeq = (this._pvSeq || 0) + 1)
-      const nodes = Array.from(container.querySelectorAll('.pv-mermaid[data-src]'))
+      const nodes = Array.from(container.querySelectorAll('.pv-mermaid'))
       if (!nodes.length) return
       nodes.forEach((n, i) => {
-        const code = decodeURIComponent(n.getAttribute('data-src') || '')
+        const code = fences && fences[i] !== undefined ? fences[i] : ''
         ;(async () => {
           try {
             const { svg } = await mermaid.render('mmd' + Date.now() + '-' + seq + '-' + i, code)
             if (this._pvSeq === seq && n.isConnected) n.innerHTML = svg
           } catch (e) {
             if (this._pvSeq === seq && n.isConnected) {
-              n.innerHTML = '<pre class="pv-mmd-err">⚠ Mermaid 解析失败: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</pre>'
+              const msg = String((e && (e.message || e.hash)) || e)
+                .replace(/</g, '&lt;').replace(/\n/g, '\n')
+              n.innerHTML = '<pre class="pv-mmd-err">⚠ Mermaid 渲染失败:\n' + msg + '</pre>'
             }
           }
         })()
