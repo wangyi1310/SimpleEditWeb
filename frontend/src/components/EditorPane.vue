@@ -175,22 +175,32 @@ export default {
         })()
       })
     },
-    // 编辑区滚动 → 预览区按比例跟随
+    // 编辑区滚动 → 预览区跟随（带防回声锁：程序化设置后一帧内忽略对方回调）
     syncEditorScroll() {
+      if (this._suppressEd) return
       const el = this.$refs.pv
       if (!el || !this.view) return
       const sc = this.view.scrollDOM
       const ratio = sc.scrollTop / (sc.scrollHeight - sc.clientHeight || 1)
-      el.scrollTop = ratio * (el.scrollHeight - el.clientHeight)
+      this._suppressPv = true
+      const t = ratio * (el.scrollHeight - el.clientHeight)
+      if (Math.abs(el.scrollTop - t) > 1.5) el.scrollTop = t
+      requestAnimationFrame(() => { this._suppressPv = false })
     },
+    // 预览区滚动 → 编辑区跟随（同样防回声）
     syncPvScroll() {
+      if (this._suppressPv) return
       const el = this.$refs.pv
       if (!el || !this.view) return
       const sc = this.view.scrollDOM
       const ratio = el.scrollTop / (el.scrollHeight - el.clientHeight || 1)
-      sc.scrollTop = ratio * (sc.scrollHeight - sc.clientHeight)
+      this._suppressEd = true
+      const t = ratio * (sc.scrollHeight - sc.clientHeight)
+      if (Math.abs(sc.scrollTop - t) > 1.5) sc.scrollTop = t
+      requestAnimationFrame(() => { this._suppressEd = false })
     },
     onEditorScroll() {
+      if (this._suppressEd) return
       if (this.preview) this.syncEditorScroll()
     }
   },
