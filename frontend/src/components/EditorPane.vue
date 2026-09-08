@@ -17,8 +17,23 @@ import { markdown } from '@codemirror/lang-markdown'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { json } from '@codemirror/lang-json'
-import { marked } from 'marked'
+import { marked, Renderer } from 'marked'
 import DOMPurify from 'dompurify'
+import mermaid from 'mermaid'
+
+// Mermaid 全局只初始化一次
+mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' })
+
+const mdRenderer = new Renderer()
+// 代码块：language 为 mermaid 时转成占位块，渲染完成后交给 mermaid 画图
+mdRenderer.code = (code, infostring) => {
+  const lang = (infostring || '').trim().split(/\s+/)[0].toLowerCase()
+  if (lang === 'mermaid') {
+    const src = encodeURIComponent(code || '')
+    return `<div class="pv-mermaid" data-src="${src}"><pre class="pv-mmd-load">渲染中…</pre></div>`
+  }
+  return false // 其它语言走默认高亮/代码块
+}
 
 function langFor(path) {
   const p = (path || '').toLowerCase()
@@ -137,8 +152,28 @@ export default {
       if (!el) return
       const src = this.getContent() || ''
       let html = ''
-      try { html = marked.parse(src) } catch (e) { html = '<p class="pv-err">渲染失败: ' + e + '</p>' }
+      try { html = marked.parse(src, { renderer: mdRenderer }) } catch (e) { html = '<p class="pv-err">渲染失败: ' + e + '</p>' }
       el.innerHTML = DOMPurify.sanitize(html)
+      this.renderMermaids(el)
+    },
+    // 逐个渲染 ```mermaid 代码块（异步, 带竞态与断连保护）
+    renderMermaids(container) {
+      const seq = (this._pvSeq = (this._pvSeq || 0) + 1)
+      const nodes = Array.from(container.querySelectorAll('.pv-mermaid[data-src]'))
+      if (!nodes.length) return
+      nodes.forEach((n, i) => {
+        const code = decodeURIComponent(n.getAttribute('data-src') || '')
+        ;(async () => {
+          try {
+            const { svg } = await mermaid.render('mmd' + Date.now() + '-' + seq + '-' + i, code)
+            if (this._pvSeq === seq && n.isConnected) n.innerHTML = svg
+          } catch (e) {
+            if (this._pvSeq === seq && n.isConnected) {
+              n.innerHTML = '<pre class="pv-mmd-err">⚠ Mermaid 解析失败: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</pre>'
+            }
+          }
+        })()
+      })
     },
     // 编辑区滚动 → 预览区按比例跟随
     syncEditorScroll() {
@@ -249,6 +284,14 @@ export default {
 .md-preview :deep(tr:nth-child(2n)) { background: #fafbfc; }
 .md-preview :deep(hr) { border: none; border-top: 2px solid #eaecef; margin: 1.2em 0; }
 .md-preview :deep(img) { max-width: 100%; }
+/* Mermaid 图表 */
+.md-preview :deep(.pv-mermaid) { text-align: center; margin: .8em 0; overflow: auto; }
+.md-preview :deep(.pv-mermaid svg) { max-width: 100%; height: auto; }
+.md-preview :deep(.pv-mmd-load) { color: var(--text-dim); font-size: 12px; }
+.md-preview :deep(.pv-mmd-err) {
+  text-align: left; color: #c0342d; background: #fdf1f0; border: 1px solid #f3c4c0;
+  border-radius: 6px; padding: 8px 12px; font-size: 12px; white-space: pre-wrap;
+}
 .md-preview :deep(.pv-err) { color: #cf222e; }
 .md-preview :deep(::selection) { background: #b6d7ff; }
 </style>
